@@ -79,7 +79,7 @@ def technical_query(query: str) -> str:
 
 def search_web(query: str, num_results: int | None = None, technical_mode: bool | None = None) -> list[dict[str, Any]]:
     use_technical_mode = settings.technical_mode if technical_mode is None else technical_mode
-    limit = max(1, min(num_results or settings.searxng_results, 10))
+    limit = max(1, min(num_results or settings.max_search_results, 10))
     transformed_query = technical_query(query) if use_technical_mode else query
     response = requests.get(
         f"{settings.searxng_url.rstrip('/')}/search",

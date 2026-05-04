@@ -12,7 +12,7 @@ from .config import settings
 from .llm import embedding_model
 from .search import USER_AGENT, canonicalize_url
 from .text import chunk_text
-from .vector_store import count, delete_document_points, document_payloads, upsert_chunks
+from .vector_store import count, delete_document_points, document_payloads, update_document_metadata, upsert_chunks
 from .workbases import next_dataset_id, now_iso, record_dataset, workbase_dir
 
 
@@ -282,6 +282,30 @@ def _ingest_parsed(
     if existing and existing_fingerprints == {source_fingerprint}:
         duplicates = len(existing)
         stats = {"chunks_added": 0, "chunks_updated": 0, "duplicates_skipped": duplicates}
+        update_document_metadata(
+            workbase_id,
+            document_id,
+            {
+                "title": parsed.title,
+                "url": parsed.canonical_url,
+                "canonical_url": parsed.canonical_url,
+                "source_origin": "manual_curation",
+                "trust_level": "curated",
+                "is_verified": True,
+                "ingestion_method": ingestion_method,
+                "parser_name": parsed.parser_name,
+                "parser_version": parsed.parser_version,
+                "file_name": file_name,
+                "file_type": parsed.file_type,
+                "stored_file_path": stored_file_path,
+                "notes": notes,
+                "tags": tags or [],
+                "author": (citation or {}).get("author", ""),
+                "year": (citation or {}).get("year", ""),
+                "accessed_date": (citation or {}).get("accessed_date", now_iso()[:10]),
+                "citation_key": (citation or {}).get("citation_key", ""),
+            },
+        )
     else:
         if existing:
             delete_document_points(workbase_id, document_id)
