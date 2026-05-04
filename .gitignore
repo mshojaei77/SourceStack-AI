@@ -41,3 +41,7 @@ data/
 # Mac
 .DS_Store
 DEPLOYMENT_guide.md
+.runlogs/
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo

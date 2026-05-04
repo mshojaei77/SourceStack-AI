@@ -62,6 +62,7 @@ def create_workbase(name: str, description: str = "") -> WorkbaseResult:
         "chunk_count": 0,
         "messages": [],
         "datasets": [],
+        "reports": [],
     }
     save_workbase(metadata)
     return WorkbaseResult(True, workbase=metadata)
@@ -116,6 +117,56 @@ def add_message(workbase_id: str, role: str, content: str, sources: list[dict] |
         message["sources"] = sources
     metadata.setdefault("messages", []).append(message)
     save_workbase(metadata)
+
+
+def add_report(
+    workbase_id: str,
+    title: str,
+    report_type: str,
+    content: str,
+    sources: list[dict] | None = None,
+) -> dict[str, Any] | None:
+    metadata = get_workbase(workbase_id)
+    if not metadata:
+        return None
+    report = {
+        "id": f"report-{uuid.uuid4().hex[:8]}",
+        "title": (title or "Untitled report").strip(),
+        "type": report_type,
+        "content": content,
+        "sources": sources or [],
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    metadata.setdefault("reports", []).append(report)
+    save_workbase(metadata)
+    return report
+
+
+def update_report(workbase_id: str, report_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
+    metadata = get_workbase(workbase_id)
+    if not metadata:
+        return None
+    for report in metadata.setdefault("reports", []):
+        if report.get("id") == report_id:
+            report.update(updates)
+            report["updated_at"] = now_iso()
+            save_workbase(metadata)
+            return report
+    return None
+
+
+def delete_report(workbase_id: str, report_id: str) -> bool:
+    metadata = get_workbase(workbase_id)
+    if not metadata:
+        return False
+    reports = metadata.setdefault("reports", [])
+    remaining = [report for report in reports if report.get("id") != report_id]
+    if len(remaining) == len(reports):
+        return False
+    metadata["reports"] = remaining
+    save_workbase(metadata)
+    return True
 
 
 def next_dataset_id(workbase_id: str) -> str:
