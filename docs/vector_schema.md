@@ -42,6 +42,22 @@ Each vector point stores:
 | `chunk_index` | Chunk number within the source |
 | `created_at` | UTC ingestion timestamp |
 | `text` | Chunk text used for final RAG context |
+| `source_origin` | `manual_curation` or `agent_web` |
+| `trust_level` | `curated`, `trusted_domain`, or `general_web` |
+| `is_verified` | Whether the source is treated as verified |
+| `ingestion_method` | `file_upload`, `direct_url`, or `search_web` |
+| `parser_name` | Parser that produced the chunk |
+| `document_id` | Stable document identifier |
+| `source_fingerprint` | File/content fingerprint for duplicate handling |
+| `content_hash` | Chunk content hash |
+| `canonical_url` | Normalized URL without tracking parameters |
+| `file_name` | Uploaded file name, if any |
+| `file_type` | Source file type |
+| `embedding_model` | Embedding model used |
+| `embedding_dim` | Vector dimension |
+| `section_h1` | Nearest H1 heading context |
+| `section_h2` | Nearest H2 heading context |
+| `section_h3` | Nearest H3 heading context |
 
 ## Workbase Metadata
 
@@ -74,3 +90,11 @@ The `datasets` array tracks every ingestion iteration:
 ```
 
 Failed full-page scrapes are still recorded with `scrape_status = "failed"` and fall back to the SearxNG snippet when possible.
+
+## Retrieval Modes
+
+- `all`: all chunks in the active Workbase.
+- `curated_trusted`: chunks where `trust_level` is `curated` or `trusted_domain`.
+- `curated_only`: chunks where `source_origin` is `manual_curation`.
+
+All modes still enforce the active `workbase_id` filter.

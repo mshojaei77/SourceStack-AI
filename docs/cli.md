@@ -28,6 +28,13 @@ python src/cli.py ask machine-learning "Define ML"
 
 The Workbase argument can be a full ID, ID prefix, exact name, or unique partial name.
 
+Use Technical Mode and retrieval controls:
+
+```powershell
+python src/cli.py ask machine-learning "Explain autograd" --technical-mode --retrieval-mode curated_trusted
+python src/cli.py ask machine-learning "Summarize my curated notes" --retrieval-mode curated_only
+```
+
 ## Continue the Same Workbase
 
 ```powershell
@@ -62,3 +69,19 @@ python src/cli.py delete machine-learning --yes
 ```
 
 Deletion removes the local metadata and the Qdrant points for that Workbase.
+
+## Manual Ingestion
+
+Ingest a trusted Markdown, text, or PDF file:
+
+```powershell
+python src/cli.py ingest-file machine-learning .\notes\chapter-1.md --title "Chapter 1 Notes"
+```
+
+Ingest a curated URL directly without using the search agent:
+
+```powershell
+python src/cli.py ingest-url machine-learning https://pytorch.org/docs/stable/autograd.html --title "PyTorch Autograd"
+```
+
+Manual ingestion creates `manual_ingestion` datasets with `trust_level=curated` and deterministic Qdrant point IDs. Re-ingesting the same source skips unchanged chunks.

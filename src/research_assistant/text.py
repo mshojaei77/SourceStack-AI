@@ -6,8 +6,8 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
-def chunk_text(text: str, chunk_size: int, overlap: int) -> list[str]:
-    text = clean_text(text)
+def chunk_text(text: str, chunk_size: int, overlap: int, preserve_structure: bool = False) -> list[str]:
+    text = (text or "").strip() if preserve_structure else clean_text(text)
     if not text:
         return []
 
@@ -16,9 +16,9 @@ def chunk_text(text: str, chunk_size: int, overlap: int) -> list[str]:
     while start < len(text):
         end = min(start + chunk_size, len(text))
         if end < len(text):
-            boundary = max(text.rfind(". ", start, end), text.rfind(" ", start, end))
+            boundary = max(text.rfind("\n\n", start, end), text.rfind(". ", start, end), text.rfind(" ", start, end))
             if boundary > start + chunk_size // 2:
-                end = boundary + 1
+                end = boundary + (2 if text[boundary : boundary + 2] == "\n\n" else 1)
 
         chunk = text[start:end].strip()
         if chunk:

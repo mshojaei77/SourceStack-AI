@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from research_assistant.config import settings
+from research_assistant.manual_ingest import ingest_file, ingest_url
 from research_assistant.rag_pipeline import answer_message
 from research_assistant.workbases import (
     create_workbase,
@@ -140,10 +141,23 @@ def cmd_delete(args: argparse.Namespace) -> int:
     return 0
 
 
-def _run_question(workbase_id: str, question: str, model: str | None, show_status: bool) -> tuple[str, list[dict]]:
+def _run_question(
+    workbase_id: str,
+    question: str,
+    model: str | None,
+    show_status: bool,
+    technical_mode: bool | None = None,
+    retrieval_mode: str = "all",
+) -> tuple[str, list[dict]]:
     answer = ""
     sources: list[dict] = []
-    for event in answer_message(workbase_id, question, model=model):
+    for event in answer_message(
+        workbase_id,
+        question,
+        model=model,
+        technical_mode=technical_mode,
+        retrieval_mode=retrieval_mode,
+    ):
         if event["type"] == "status":
             if show_status:
                 print(f"[status] {event['content']}", file=sys.stderr)
@@ -164,7 +178,8 @@ def _print_sources(sources: list[dict]) -> None:
         print(
             f"[{index}] {source.get('title', 'Untitled')} | "
             f"{source.get('dataset_id', 'unknown dataset')} | "
-            f"score={source.get('score', 0.0):.3f}"
+            f"{source.get('trust_level', 'general_web')} | "
+            f"score={source.get('score_final', source.get('score', 0.0)):.3f}"
         )
         if source.get("url"):
             print(f"    {source['url']}")
@@ -178,7 +193,15 @@ def cmd_ask(args: argparse.Namespace) -> int:
     if not workbase:
         return _print_error("Workbase not found.")
 
-    answer, sources = _run_question(workbase["id"], args.question, args.model, not args.no_status)
+    technical_mode = True if args.technical_mode else None
+    answer, sources = _run_question(
+        workbase["id"],
+        args.question,
+        args.model,
+        not args.no_status,
+        technical_mode=technical_mode,
+        retrieval_mode=args.retrieval_mode,
+    )
     if args.json:
         print(json.dumps({"answer": answer, "sources": sources}, ensure_ascii=False, indent=2))
     elif not args.no_sources:
@@ -218,7 +241,14 @@ def cmd_chat(args: argparse.Namespace) -> int:
             continue
 
         print("Assistant> ", end="", flush=True)
-        _, sources = _run_question(workbase["id"], question, args.model, not args.no_status)
+        _, sources = _run_question(
+            workbase["id"],
+            question,
+            args.model,
+            not args.no_status,
+            technical_mode=True if args.technical_mode else None,
+            retrieval_mode=args.retrieval_mode,
+        )
         if not args.no_sources:
             _print_sources(sources)
 
@@ -261,6 +291,43 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def cmd_ingest_file(args: argparse.Namespace) -> int:
+    try:
+        workbase = _resolve_workbase(args.workbase)
+    except ValueError as exc:
+        return _print_error(str(exc))
+    if not workbase:
+        return _print_error("Workbase not found.")
+    result = ingest_file(workbase["id"], args.path, title=args.title or "", notes=args.notes or "")
+    print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else _format_ingest_result(result))
+    return 0
+
+
+def cmd_ingest_url(args: argparse.Namespace) -> int:
+    try:
+        workbase = _resolve_workbase(args.workbase)
+    except ValueError as exc:
+        return _print_error(str(exc))
+    if not workbase:
+        return _print_error("Workbase not found.")
+    result = ingest_url(workbase["id"], args.url, title=args.title or "", notes=args.notes or "")
+    print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else _format_ingest_result(result))
+    return 0
+
+
+def _format_ingest_result(result: dict[str, Any]) -> str:
+    return (
+        f"Source added: {result.get('title', '')}\n"
+        f"  dataset: {result.get('dataset_id', '')}\n"
+        f"  document: {result.get('document_id', '')}\n"
+        f"  parser: {result.get('parser_name', '')}\n"
+        f"  chunks added: {result.get('chunks_added', 0)}\n"
+        f"  chunks updated: {result.get('chunks_updated', 0)}\n"
+        f"  duplicates skipped: {result.get('duplicates_skipped', 0)}\n"
+        f"  total chunks: {result.get('total_chunks', 0)}"
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="CLI for the Research Assistant RAG platform.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -296,6 +363,12 @@ def build_parser() -> argparse.ArgumentParser:
     ask.add_argument("--json", action="store_true")
     ask.add_argument("--no-status", action="store_true")
     ask.add_argument("--no-sources", action="store_true")
+    ask.add_argument("--technical-mode", action="store_true")
+    ask.add_argument(
+        "--retrieval-mode",
+        choices=["all", "curated_trusted", "curated_only"],
+        default="all",
+    )
     ask.set_defaults(func=cmd_ask)
 
     chat = subparsers.add_parser("chat", help="Start an interactive chat in a workbase.")
@@ -303,11 +376,33 @@ def build_parser() -> argparse.ArgumentParser:
     chat.add_argument("--model")
     chat.add_argument("--no-status", action="store_true")
     chat.add_argument("--no-sources", action="store_true")
+    chat.add_argument("--technical-mode", action="store_true")
+    chat.add_argument(
+        "--retrieval-mode",
+        choices=["all", "curated_trusted", "curated_only"],
+        default="all",
+    )
     chat.set_defaults(func=cmd_chat)
 
     doctor = subparsers.add_parser("doctor", help="Check local services and configuration.")
     doctor.add_argument("--query", default="machine learning definition")
     doctor.set_defaults(func=cmd_doctor)
+
+    ingest_file_cmd = subparsers.add_parser("ingest-file", help="Manually ingest a PDF, Markdown, or text file.")
+    ingest_file_cmd.add_argument("workbase")
+    ingest_file_cmd.add_argument("path")
+    ingest_file_cmd.add_argument("--title", default="")
+    ingest_file_cmd.add_argument("--notes", default="")
+    ingest_file_cmd.add_argument("--json", action="store_true")
+    ingest_file_cmd.set_defaults(func=cmd_ingest_file)
+
+    ingest_url_cmd = subparsers.add_parser("ingest-url", help="Manually ingest a curated URL.")
+    ingest_url_cmd.add_argument("workbase")
+    ingest_url_cmd.add_argument("url")
+    ingest_url_cmd.add_argument("--title", default="")
+    ingest_url_cmd.add_argument("--notes", default="")
+    ingest_url_cmd.add_argument("--json", action="store_true")
+    ingest_url_cmd.set_defaults(func=cmd_ingest_url)
 
     return parser
 

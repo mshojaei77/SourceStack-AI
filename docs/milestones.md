@@ -46,3 +46,36 @@ Status: next.
 - Add integration tests with mocked SearxNG, Qdrant, and embeddings.
 - Add Playwright browser install instructions.
 - Add admin/debug page for Workbase dataset inspection.
+
+## Phase 1 Addendum: Manual Ingestion Core
+
+Status: implemented as first pass.
+
+- CLI and Streamlit manual ingestion for Markdown, text, PDF, and direct URLs.
+- Marker is attempted for PDFs when installed; PyMuPDF is the fallback parser.
+- Manual chunks include curated trust metadata and deterministic document/chunk IDs.
+- Duplicate re-ingestion skips unchanged chunks.
+- Re-ingesting changed sources replaces prior chunks for the same document ID.
+
+## Phase 2 Addendum: Technical and Retrieval Modes
+
+Status: implemented as first pass.
+
+- Technical domain whitelist is configurable through `.env`.
+- Technical Mode adds site restrictors and applies application-level domain filtering.
+- Retrieval modes are available in CLI and Streamlit.
+
+## Phase 3 Addendum: Trust-Aware Reranking
+
+Status: implemented as first pass.
+
+- Reranker output includes `score_reranker`, `authority_boost`, and `score_final`.
+- Curated sources receive the highest authority boost.
+
+## Phase 4 Addendum: Model Routing
+
+Status: partial.
+
+- Configurable model profiles were added for planner, metadata, final answer, and deep reasoning.
+- Status output reports routed planner/final/embedding/reranker models.
+- Full token and dollar-cost accounting remains to be implemented.

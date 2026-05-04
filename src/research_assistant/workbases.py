@@ -127,10 +127,13 @@ def next_dataset_id(workbase_id: str) -> str:
 def record_dataset(
     workbase_id: str,
     dataset_id: str,
-    query: str,
+    query: str | None,
     results: list[dict],
     chunks_added: int,
     total_chunks: int,
+    dataset_type: str = "agent_web",
+    chunks_updated: int = 0,
+    duplicates_skipped: int = 0,
 ) -> None:
     metadata = get_workbase(workbase_id)
     if not metadata:
@@ -138,24 +141,48 @@ def record_dataset(
     metadata.setdefault("datasets", []).append(
         {
             "dataset_id": dataset_id,
+            "dataset_type": dataset_type,
             "query": query,
             "created_at": now_iso(),
             "sources": [
                 {
                     "source_id": item.get("source_id"),
+                    "document_id": item.get("document_id"),
                     "title": item.get("title"),
                     "url": item.get("url"),
+                    "canonical_url": item.get("canonical_url"),
                     "position": item.get("position"),
+                    "source_origin": item.get("source_origin"),
+                    "trust_level": item.get("trust_level"),
+                    "is_verified": item.get("is_verified"),
                     "scrape_status": item.get("scrape_status"),
                     "scrape_error": item.get("scrape_error"),
+                    "parser_name": item.get("parser_name"),
                     "content_source": item.get("content_source"),
+                    "file_type": item.get("file_type"),
+                    "file_name": item.get("file_name"),
+                    "tags": item.get("tags", []),
+                    "author": item.get("author"),
+                    "year": item.get("year"),
+                    "accessed_date": item.get("accessed_date"),
+                    "citation_key": item.get("citation_key"),
                 }
                 for item in results
             ],
             "chunks_added": chunks_added,
+            "chunks_updated": chunks_updated,
+            "duplicates_skipped": duplicates_skipped,
         }
     )
     metadata["search_count"] = len(metadata["datasets"])
+    metadata["chunk_count"] = total_chunks
+    save_workbase(metadata)
+
+
+def refresh_chunk_count(workbase_id: str, total_chunks: int) -> None:
+    metadata = get_workbase(workbase_id)
+    if not metadata:
+        return
     metadata["chunk_count"] = total_chunks
     save_workbase(metadata)
 

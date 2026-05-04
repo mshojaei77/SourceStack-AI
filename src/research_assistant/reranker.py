@@ -62,6 +62,13 @@ def rerank(query: str, rows: list[dict], top_k: int) -> list[dict]:
         index = item["index"]
         if 0 <= index < len(rows):
             row = rows[index].copy()
-            row["rerank_score"] = item["score"]
+            score_reranker = float(item["score"] or 0.0)
+            trust_level = row.get("metadata", {}).get("trust_level", "general_web")
+            authority_boost = settings.authority_boosts.get(trust_level, 1.0)
+            row["score_reranker"] = score_reranker
+            row["rerank_score"] = score_reranker
+            row["authority_boost"] = authority_boost
+            row["score_final"] = min(1.0, score_reranker * authority_boost)
             ranked_rows.append(row)
-    return ranked_rows or rows[:top_k]
+    ranked_rows.sort(key=lambda row: row.get("score_final", row.get("rerank_score", row.get("score", 0.0))), reverse=True)
+    return ranked_rows[:top_k] or rows[:top_k]

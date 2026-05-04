@@ -2,6 +2,7 @@ import hashlib
 import logging
 import time
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -45,12 +46,45 @@ def content_hash(*parts: str) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def search_web(query: str, num_results: int | None = None) -> list[dict[str, Any]]:
+def canonicalize_url(url: str) -> str:
+    parsed = urlparse(url.strip())
+    filtered_query = [
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        if not key.lower().startswith("utm_") and key.lower() not in {"fbclid", "gclid", "mc_cid", "mc_eid"}
+    ]
+    normalized = parsed._replace(
+        scheme=parsed.scheme.lower() or "https",
+        netloc=parsed.netloc.lower(),
+        query=urlencode(filtered_query),
+        fragment="",
+    )
+    return urlunparse(normalized)
+
+
+def domain_for_url(url: str) -> str:
+    return urlparse(url).netloc.lower().removeprefix("www.")
+
+
+def is_whitelisted_domain(url: str) -> bool:
+    domain = domain_for_url(url)
+    return any(domain == allowed or domain.endswith(f".{allowed}") for allowed in settings.technical_domain_whitelist)
+
+
+def technical_query(query: str) -> str:
+    domains = settings.technical_domain_whitelist[:8]
+    restrictors = " OR ".join(f"site:{domain}" for domain in domains)
+    return f"({restrictors}) {query}" if restrictors else query
+
+
+def search_web(query: str, num_results: int | None = None, technical_mode: bool | None = None) -> list[dict[str, Any]]:
+    use_technical_mode = settings.technical_mode if technical_mode is None else technical_mode
     limit = max(1, min(num_results or settings.searxng_results, 10))
+    transformed_query = technical_query(query) if use_technical_mode else query
     response = requests.get(
         f"{settings.searxng_url.rstrip('/')}/search",
         params={
-            "q": query,
+            "q": transformed_query,
             "format": "json",
             "language": "auto",
             "pageno": 1,
@@ -63,14 +97,25 @@ def search_web(query: str, num_results: int | None = None) -> list[dict[str, Any
 
     data = response.json()
     results = []
+    dropped = []
     for index, item in enumerate(data.get("results", [])[:limit], start=1):
+        url = canonicalize_url(item.get("url") or "")
+        if use_technical_mode and not is_whitelisted_domain(url):
+            dropped.append({"title": item.get("title") or "Untitled", "url": url, "reason": "domain_not_whitelisted"})
+            continue
+        trust_level = "trusted_domain" if is_whitelisted_domain(url) else "general_web"
         results.append(
             {
                 "position": index,
                 "title": item.get("title") or "Untitled",
-                "url": item.get("url") or "",
+                "url": url,
+                "canonical_url": url,
                 "snippet": item.get("content") or item.get("snippet") or "",
                 "engine": item.get("engine") or "",
+                "source_origin": "agent_web",
+                "trust_level": trust_level,
+                "is_verified": trust_level == "trusted_domain",
+                "dropped_results": dropped,
             }
         )
     return results
@@ -147,9 +192,9 @@ def scrape_url(url: str) -> tuple[str, str]:
     return "", "empty_extraction"
 
 
-def search_and_scrape(query: str, num_results: int | None = None) -> list[dict[str, Any]]:
-    results = search_web(query, num_results)
-    for result in results:
+def search_and_scrape(query: str, num_results: int | None = None, technical_mode: bool | None = None) -> list[dict[str, Any]]:
+    results = search_web(query, num_results, technical_mode=technical_mode)
+    for result in results[: settings.max_scrape_pages]:
         result["source_id"] = content_hash(query, result.get("url", ""), str(result.get("position", "")))[:16]
         try:
             scraped, content_source = scrape_url(result["url"])
@@ -164,4 +209,10 @@ def search_and_scrape(query: str, num_results: int | None = None) -> list[dict[s
             result["content_source"] = "snippet"
         result["content"] = scraped or result["snippet"]
         time.sleep(0.2)
+    for result in results[settings.max_scrape_pages :]:
+        result["source_id"] = content_hash(query, result.get("url", ""), str(result.get("position", "")))[:16]
+        result["scrape_status"] = "skipped"
+        result["scrape_error"] = "max_scrape_pages"
+        result["content_source"] = "snippet"
+        result["content"] = result["snippet"]
     return results

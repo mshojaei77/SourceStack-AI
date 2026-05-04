@@ -1,4 +1,4 @@
-# Research Assistant
+# SourceStack AI
 
 An open-source, agentic RAG chatbot with incremental web knowledge ingestion.
 
@@ -23,6 +23,10 @@ The result is a continuously growing, per-Workbase knowledge base.
 - Streamlit UI + CLI interface sharing the same backend pipeline.
 - Dataset iteration tracking (`dataset-000001`, `dataset-000002`, ...).
 - Scrape failure tracking with snippet fallback.
+- Manual ingestion for PDF, Markdown, text, and curated URLs.
+- Technical Mode for allowlisted engineering/research sources.
+- Retrieval modes: all sources, curated + trusted domains, or curated only.
+- Configurable model routing for planner/final/embedding/reranking tasks.
 
 ## Architecture
 
@@ -142,6 +146,20 @@ Continue in the same workbase:
 python src/cli.py ask machine-learning "Machine learning vs deep learning"
 ```
 
+Manually ingest a trusted source:
+
+```powershell
+python src/cli.py ingest-file machine-learning .\notes\chapter-1.md --title "Chapter 1 Notes"
+python src/cli.py ingest-url machine-learning https://pytorch.org/docs/stable/autograd.html --title "PyTorch Autograd"
+```
+
+Use source controls:
+
+```powershell
+python src/cli.py ask machine-learning "Summarize my curated sources" --retrieval-mode curated_only
+python src/cli.py ask machine-learning "Explain autograd" --technical-mode --retrieval-mode curated_trusted
+```
+
 Interactive chat:
 
 ```powershell
@@ -180,6 +198,9 @@ Each dataset record includes:
 - source URLs
 - scrape status and scrape errors
 - chunk count added
+- duplicate chunks skipped
+- updated chunks
+- source trust level
 
 ## Known Operational Notes
 
