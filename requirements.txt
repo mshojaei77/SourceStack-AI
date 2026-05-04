@@ -1,0 +1,16 @@
+openai>=1.0.0
+python-dotenv>=1.0.0
+streamlit>=1.35.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+qdrant-client>=1.9.0
+langchain>=0.2.0
+langgraph>=0.2.0
+trafilatura>=1.8.0
+playwright>=1.44.0
+torch
+transformers
+einops
+accelerate
+huggingface_hub
+hf_transfer
